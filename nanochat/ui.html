@@ -258,6 +258,59 @@
     </div>
 
     <div class="input-container">
+
+        <!-------------------------new ----------------------->
+        <!-- temperature slide -->
+        <div style="margin: 0 0 10px 0; text-align: center; padding: 4px 0;">
+            <label for="tempSliderT" style="font-size: 14px; color: #374151; cursor: default;">
+                Temperature: <span id="currentTempTemperature" style="font-weight: 500; color: #1f2937;">0.8</span>
+            </label>
+            <input 
+                type="range" 
+                id="tempSliderT" 
+                min="0.0" 
+                max="1.0" 
+                step="0.1" 
+                value="0.8"
+                style="width: 200px; margin-left: 8px; vertical-align: middle;"
+            >
+        </div>
+
+        <!-- Top-K slide -->
+        <div style="margin: 0 0 10px 0; text-align: center; padding: 4px 0;">
+            <label for="tempSliderK" style="font-size: 14px; color: #374151; cursor: default;">
+                Top-K: <span id="currentTempK" style="font-weight: 500; color: #1f2937;">50</span>
+            </label>
+            <input 
+                type="range" 
+                id="tempSliderK" 
+                min="2" 
+                max="200" 
+                step="0.1" 
+                value="50"
+                style="width: 200px; margin-left: 8px; vertical-align: middle;"
+            >
+        </div>
+
+        <!-- Top-P slide -->
+        <div style="margin: 0 0 10px 0; text-align: center; padding: 4px 0;">
+            <label for="tempSliderP" style="font-size: 14px; color: #374151; cursor: default;">
+                Top-P: <span id="currentTempP" style="font-weight: 500; color: #1f2937;">1.0</span>
+            </label>
+            <input 
+                type="range" 
+                id="tempSliderP" 
+                min="0.1" 
+                max="1.0" 
+                step="0.1" 
+                value="1.0"
+                style="width: 200px; margin-left: 8px; vertical-align: middle;"
+            >
+        </div>
+        <!-------------------------new ----------------------->
+
+
+        
         <div class="input-wrapper">
             <textarea
                 id="chatInput"
@@ -286,6 +339,7 @@
         let isGenerating = false;
         let currentTemperature = 0.8;
         let currentTopK = 50;
+        let currentTopP = 1.0;
 
         chatInput.addEventListener('input', function() {
             this.style.height = 'auto';
@@ -400,6 +454,7 @@
                         messages: messages,
                         temperature: currentTemperature,
                         top_k: currentTopK,
+                        top_p: currentTopP,
                         max_tokens: 512
                     }),
                 });
@@ -507,6 +562,19 @@
                     }
                 }
                 return true;
+            }else if (cmd === '/topp') {
+                if (arg === undefined) {
+                    addMessage('console', `Current top-p: ${currentTopP}`);
+                } else {
+                    const topk = parseInt(arg);
+                    if (isNaN(topk) || topp < 0.0 || topk > 1.0) {
+                        addMessage('console', 'Invalid top-p. Must be between 0.0 and 1.0');
+                    } else {
+                        currentTopK = topk;
+                        addMessage('console', `Top-p set to ${currentTopP}`);
+                    }
+                }
+                return true;
             } else if (cmd === '/clear') {
                 newConversation();
                 return true;
@@ -517,6 +585,8 @@
                     '/temperature <value> - Set temperature (0.0-2.0)\n' +
                     '/topk - Show current top-k\n' +
                     '/topk <value> - Set top-k (1-200)\n' +
+                    '/topp - Show current top-p\n' +
+                    '/topp <value> - Set top-p (0.0-1.0)\n' +
                     '/clear - Clear conversation\n' +
                     '/help - Show this help message'
                 );
@@ -561,6 +631,50 @@
                 console.error('Engine not available:', error);
                 chatWrapper.innerHTML = '<div class="error-message">Engine not running. Please start engine.py first.</div>';
             });
+
+
+        //add temperature/topK setting
+        function initSlider() {
+            // temperature
+            const tempSliderT = document.getElementById('tempSliderT');
+            const currentTempTemperature = document.getElementById('currentTempTemperature');
+
+            // top-k
+            const tempSliderK = document.getElementById('tempSliderK');
+            const currentTempK = document.getElementById('currentTempK');
+
+            // top-p
+            const tempSliderP = document.getElementById('tempSliderP');
+            const currentTempP = document.getElementById('currentTempP');
+
+            if (!tempSliderT || !currentTempTemperature || !tempSliderK || !currentTempK ||!tempSliderP || !currentTempP) {
+                console.warn('slider elements not found');
+                return;
+            }
+
+            tempSliderT.addEventListener('input', function() {
+                currentTemperature = parseFloat(this.value);
+                currentTempTemperature.textContent = currentTemperature.toFixed(1);
+                // addMessage('console', `Temperature set to ${currentTemperature}`);
+            });
+
+            tempSliderK.addEventListener('input', function() {
+                currentTopK = parseInt(this.value, 10);
+                currentTempK.textContent = currentTopK;
+                // addMessage('console', `Top-K set to ${currentTopK}`);
+            });
+
+            tempSliderP.addEventListener('input', function() {
+                currentTopP = parseFloat(this.value);
+                currentTempP.textContent = currentTopP.toFixed(1);
+                // addMessage('console', `Top-K set to ${currentTopK}`);
+            });
+
+        }
+        initSlider();
+
+
+
     </script>
 </body>
 </html>
