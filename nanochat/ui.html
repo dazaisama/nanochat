@@ -566,11 +566,11 @@
                 if (arg === undefined) {
                     addMessage('console', `Current top-p: ${currentTopP}`);
                 } else {
-                    const topk = parseInt(arg);
-                    if (isNaN(topk) || topp < 0.0 || topk > 1.0) {
+                    const topp = parseInt(arg);
+                    if (isNaN(topp) || topp < 0.0 || topp > 1.0) {
                         addMessage('console', 'Invalid top-p. Must be between 0.0 and 1.0');
                     } else {
-                        currentTopK = topk;
+                        currentTopP = topp;
                         addMessage('console', `Top-p set to ${currentTopP}`);
                     }
                 }
