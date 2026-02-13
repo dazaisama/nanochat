@@ -133,16 +133,34 @@ class KVCache:
 
 # -----------------------------------------------------------------------------
 @torch.inference_mode()
-def sample_next_token(logits, rng, temperature=1.0, top_k=None):
+def sample_next_token(logits, rng, temperature=1.0, top_k=None, top_p=None):
     """Sample a single next token from given logits of shape (B, vocab_size). Returns (B, 1)."""
     assert temperature >= 0.0, "temperature must be non-negative"
+    
     if temperature == 0.0:
         return torch.argmax(logits, dim=-1, keepdim=True)
+    
+    # top_k---> top_p
     if top_k is not None and top_k > 0:
         k = min(top_k, logits.size(-1))
         vals, idx = torch.topk(logits, k, dim=-1)
         vals = vals / temperature
         probs = F.softmax(vals, dim=-1)
+
+        #Top-p
+        if top_p is not None and top_p!=1.0:
+            cum_probs = torch.cumsum(probs, dim=-1)
+            cut_index = torch.zeros_like(cum_probs[:, 0], dtype=torch.long)
+            for i in range(cum_probs.size(0)):  # batch
+                for j in range(cum_probs.size(1)):  # token
+                    if cum_probs[i, j] > top_p:
+                        cut_index[i] = j
+                        break
+            # cut the rest
+            probs = torch.stack([probs[i, :cut_index[i]+1] for i in range(probs.size(0))], dim=0)
+            # recompute the probs
+            probs = F.softmax(probs, dim=-1)
+
         choice = torch.multinomial(probs, num_samples=1, generator=rng)
         return idx.gather(1, choice)
     else:
@@ -168,7 +186,7 @@ class Engine:
         self.tokenizer = tokenizer # needed for tool use
 
     @torch.inference_mode()
-    def generate(self, tokens, num_samples=1, max_tokens=None, temperature=1.0, top_k=None, seed=42):
+    def generate(self, tokens, num_samples=1, max_tokens=None, temperature=1.0, top_k=None, top_p=None, seed=42):
         """Same as generate, but does single prefill and then clones the KV cache."""
         assert isinstance(tokens, list) and isinstance(tokens[0], int), "expecting list of ints"
         device = self.model.get_device()
@@ -231,7 +249,7 @@ class Engine:
                 break
 
             # Sample the next token for each row
-            next_ids = sample_next_token(logits, rng, temperature, top_k)  # (B, 1)
+            next_ids = sample_next_token(logits, rng, temperature, top_k, top_p)  # (B, 1)
             sampled_tokens = next_ids[:, 0].tolist()
 
             # Process each row: choose the next token, update state, optional tool use
