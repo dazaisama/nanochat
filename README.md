@@ -31,6 +31,9 @@
 2 推理一段文本，取最后一个token推理中的各层attention maps          
 3 loss曲线      
 
+计算资源有限，训练1000步耗时太长，在210steps的截图：   
+![loss](dev/loss.png)     
+
 预期效果：        
 1 训练充分之后，gating score矩阵应该是非常稀疏的，数值聚集在0附近           
 2 显著缓解attention sinks现象。即将序列最后一个token推理中的各层attention maps绘制出热力图，高分数应该聚集在对角线，而不是首个Token。从而让sliding window更加有效捕捉最近的语义信息，不用再考虑最初几个token的信息，减轻KV cache压力。           
