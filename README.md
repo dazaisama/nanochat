@@ -17,7 +17,7 @@
 
 ### Gated-Attention
 把selfCasualAttention改进为Gated Attention (nanochat/gpt.py)，具体是在attn计算得到输出，还未进行线性映射的时候，加入一个哈达玛积的Gate机制。思路来源于NIPS 2025 best paper (https://arxiv.org/abs/2505.06708)   
-[gated attn](dev/Gated_attn.png)      
+![gated attn](dev/Gated_attn.png)      
 思路：文章已经验证了Gate机制放在attn计算后的位置最佳，V计算后的位置次之。并且门控计算中sigmoid激活和哈达玛积的效果搭配最好。    
 
 对于原论文的创新：我发现原架构在V的位置已经加入Gate机制，而且是采用加法运算，这种gate效果不如改进后的好，但我保留了这一部分，因为我觉得V后的门控和attn计算后的门控同时作用，比单一门控模型表现会更好一些。    
