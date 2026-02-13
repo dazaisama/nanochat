@@ -57,6 +57,11 @@ MIN_TEMPERATURE = 0.0
 MAX_TEMPERATURE = 2.0
 MIN_TOP_K = 0 # 0 disables top-k filtering, using full vocabulary
 MAX_TOP_K = 200
+
+#NEW
+MAX_TOP_P = 1.0
+MIN_TOP_P = 0.1
+
 MIN_MAX_TOKENS = 1
 MAX_MAX_TOKENS = 4096
 
@@ -65,6 +70,10 @@ parser.add_argument('-n', '--num-gpus', type=int, default=1, help='Number of GPU
 parser.add_argument('-i', '--source', type=str, default="sft", help="Source of the model: sft|rl")
 parser.add_argument('-t', '--temperature', type=float, default=0.8, help='Default temperature for generation')
 parser.add_argument('-k', '--top-k', type=int, default=50, help='Default top-k sampling parameter')
+
+#NEW
+parser.add_argument('-topp', '--top-p', type=int, default=1.0, help='Default top-p sampling parameter')
+
 parser.add_argument('-m', '--max-tokens', type=int, default=512, help='Default max tokens for generation')
 parser.add_argument('-g', '--model-tag', type=str, default=None, help='Model tag to load')
 parser.add_argument('-s', '--step', type=int, default=None, help='Step to load')
@@ -156,6 +165,7 @@ class ChatRequest(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     top_k: Optional[int] = None
+    top_p: Optional[float] = None
 
 def validate_chat_request(request: ChatRequest):
     """Validate chat request to prevent abuse."""
@@ -212,6 +222,15 @@ def validate_chat_request(request: ChatRequest):
                 detail=f"top_k must be between {MIN_TOP_K} and {MAX_TOP_K}"
             )
 
+    # Validate top_p
+    if request.top_p is not None:
+        if not (MIN_TOP_P <= request.top_p <= MAX_TOP_P):
+            raise HTTPException(
+                status_code=400,
+                detail=f"top_p must be between {MIN_TOP_P} and {MAX_TOP_P}"
+            )
+
+
     # Validate max_tokens
     if request.max_tokens is not None:
         if not (MIN_MAX_TOKENS <= request.max_tokens <= MAX_MAX_TOKENS):
@@ -264,12 +283,14 @@ async def generate_stream(
     tokens,
     temperature=None,
     max_new_tokens=None,
-    top_k=None
+    top_k=None,
+    top_p=None
 ) -> AsyncGenerator[str, None]:
     """Generate assistant response with streaming."""
     temperature = temperature if temperature is not None else args.temperature
     max_new_tokens = max_new_tokens if max_new_tokens is not None else args.max_tokens
     top_k = top_k if top_k is not None else args.top_k
+    top_p = top_p if top_p is not None else args.top_p
 
     assistant_end = worker.tokenizer.encode_special("<|assistant_end|>")
     bos = worker.tokenizer.get_bos_token_id()
@@ -286,6 +307,7 @@ async def generate_stream(
             max_tokens=max_new_tokens,
             temperature=temperature,
             top_k=top_k,
+            top_p=top_p,
             seed=random.randint(0, 2**31 - 1)
         ):
             token = token_column[0]
@@ -357,7 +379,8 @@ async def chat_completions(request: ChatRequest):
                     conversation_tokens,
                     temperature=request.temperature,
                     max_new_tokens=request.max_tokens,
-                    top_k=request.top_k
+                    top_k=request.top_k,
+                    top_p=request.top_p
                 ):
                     # Accumulate response for logging
                     chunk_data = json.loads(chunk.replace("data: ", "").strip())
@@ -411,5 +434,5 @@ async def stats():
 if __name__ == "__main__":
     import uvicorn
     print(f"Starting NanoChat Web Server")
-    print(f"Temperature: {args.temperature}, Top-k: {args.top_k}, Max tokens: {args.max_tokens}")
+    print(f"Temperature: {args.temperature}, Top-k: {args.top_k}, Top-p: {args.top_p}, Max tokens: {args.max_tokens}")
     uvicorn.run(app, host=args.host, port=args.port)
