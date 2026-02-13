@@ -10,6 +10,8 @@ Notable features:
 - no bias in linear layers
 - Group-Query Attention (GQA) support for more efficient inference
 - Flash Attention 3 integration
+- Gated Attention is supported
+- YARN is supported
 """
 from typing import Optional
 from functools import partial
