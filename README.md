@@ -51,7 +51,10 @@
 
 遇到如何选择top-p top-k的问题，是选其一还是两者兼容。最终选取了二者兼容，即取top-p和top-k交集，理由如下：           
 1 二者兼容的情况包含了只有其一生效的情况，如 Top-p=1.0，Top-k=50 本质上只有Top-k起作用。         
-2 能够更细粒度地控制采样。
+2 能够更细粒度地控制采样。      
+
+验证准确性可以在engine.generate中输出 top-p top-k temperature值         
+
 
 ## 国内友好的Swanlab支持
 swanlab不用开启代理即可使用，设置方式和wandb一致，是其完美替代。
