@@ -21,6 +21,7 @@ import argparse
 from dataclasses import asdict
 from contextlib import nullcontext, contextmanager
 
+import swanlab
 import wandb
 import torch
 
@@ -51,6 +52,11 @@ parser.add_argument("--aspect-ratio", type=int, default=64, help="model_dim = de
 parser.add_argument("--head-dim", type=int, default=128, help="target head dimension for attention")
 parser.add_argument("--max-seq-len", type=int, default=2048, help="max context length")
 parser.add_argument("--window-pattern", type=str, default="SSSL", help="sliding window pattern tiled across layers: L=full, S=half context (e.g. 'SSL')")
+
+# YARN setting
+parser.add_argument("--inference-rope-scaling", action="store_true", help="open rope scaling(YARN) (default: False)")
+
+
 # Training horizon (only one used, in order of precedence)
 parser.add_argument("--num-iterations", type=int, default=-1, help="explicit number of optimization steps (-1 = disable)")
 parser.add_argument("--target-flops", type=float, default=-1.0, help="calculate num_iterations to reach target_flops (-1 = disable)")
@@ -98,7 +104,7 @@ else:
 
 # wandb logging init
 use_dummy_wandb = args.run == "dummy" or not master_process
-wandb_run = DummyWandb() if use_dummy_wandb else wandb.init(project="nanochat", name=args.run, config=user_config)
+wandb_run = DummyWandb() if use_dummy_wandb else swanlab.init(project="nanochat", config=user_config)
 
 # Flash Attention status
 if HAS_FA3:
@@ -532,7 +538,7 @@ while True:
         eta_str = ""
     epoch = dataloader_state_dict["epoch"]
     print0(f"step {step:05d}/{num_iterations:05d} ({pct_done:.2f}%) | loss: {debiased_smooth_loss:.6f} | lrm: {lrm:.2f} | dt: {dt * 1000:.2f}ms | tok/sec: {tok_per_sec:,} | bf16_mfu: {mfu:.2f} | epoch: {epoch} | total time: {total_training_time/60:.2f}m{eta_str}")
-    if step % 100 == 0:
+    if step % 10 == 0:
         log_data = {
             "step": step,
             "total_training_flops": flops_so_far,
