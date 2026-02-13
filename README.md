@@ -9,7 +9,7 @@
 模型架构中改进ROPE为YARN (nanochat/gpt.py)，具体实现是修改了_precompute_rotary_embeddings 中计算freq的逻辑     
 思路：保护高频信息，保留短距离信息精度；对于低频则缩小频率，增加长文本捕捉能力。
 
-预期效果
+预期效果     
 1 用长文本benchmark 比如 LongBench 相较之前显著提升，并且在基本任务上不掉点。  
 2 在足够长文本训练上ppl能保持稳定下降，之前ROPE在同样情况下ppl会突然飙升。
 
@@ -26,12 +26,12 @@
 遇到的问题：想要保留最后一个token的各层attention map但是模型的计算层层封装，要修改很多参数和实现才能保留下来，不够简洁高效。
 此外我的计算资源有限，没有训练充分，观察效果可能不佳，就没去实现。
 
-验证需要观察：
+验证需要观察：     
 1 输出各层gating score （直接通过print输出）             
 2 推理一段文本，取最后一个token推理中的各层attention maps          
 3 loss曲线      
 
-预期效果：
+预期效果：        
 1 训练充分之后，gating score矩阵应该是非常稀疏的，数值聚集在0附近           
 2 显著缓解attention sinks现象。即将序列最后一个token推理中的各层attention maps绘制出热力图，高分数应该聚集在对角线，而不是首个Token。从而让sliding window更加有效捕捉最近的语义信息，不用再考虑最初几个token的信息，减轻KV cache压力。           
 3 训练更稳定，体现在loss曲线上就是毛刺更少          
@@ -46,7 +46,7 @@
 在 (/nano/engine.py) 加入top-p参数，新增top-p采样逻辑        
 并在 /scripts/chat_xxx.py：所有推理都加上top-p参数        
 
-遇到如何选择top-p top-k的问题，是选其一还是两者兼容。最终选取了二者兼容，即取top-p和top-k交集，理由如下：         
+遇到如何选择top-p top-k的问题，是选其一还是两者兼容。最终选取了二者兼容，即取top-p和top-k交集，理由如下：           
 1 二者兼容的情况包含了只有其一生效的情况，如 Top-p=1.0，Top-k=50 本质上只有Top-k起作用。         
 2 能够更细粒度地控制采样。
 
