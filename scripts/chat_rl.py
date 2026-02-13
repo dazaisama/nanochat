@@ -50,6 +50,10 @@ parser.add_argument("--num-samples", type=int, default=16, help="number of sampl
 parser.add_argument("--max-new-tokens", type=int, default=256, help="max tokens to generate per sample")
 parser.add_argument("--temperature", type=float, default=1.0, help="sampling temperature")
 parser.add_argument("--top-k", type=int, default=50, help="top-k sampling (0 = disabled)")
+
+#NEW
+parser.add_argument("--top-p", type=int, default=1.0, help='top-p sampling parameter')
+
 # Optimization
 parser.add_argument("--embedding-lr", type=float, default=0.2, help="learning rate for embedding parameters (Adam)")
 parser.add_argument("--unembedding-lr", type=float, default=0.004, help="learning rate for unembedding parameters (Adam)")
@@ -115,6 +119,7 @@ def get_batch():
                     max_tokens=args.max_new_tokens,
                     temperature=args.temperature,
                     top_k=args.top_k,
+                    top_p=args.top_p,
                     seed=seed, # must make sure to change the seed for each sampling step
                 )
             generated_token_sequences.extend(generated_token_sequences_batch)
@@ -158,7 +163,8 @@ def run_gsm8k_eval(task, tokenizer, engine,
     num_samples=1,
     max_completion_tokens=256,
     temperature=0.0,
-    top_k=50
+    top_k=50,
+    top_p=1.0
 ):
     """
     Evaluates GSM8K task and returns a list of records of evaluation outcomes.
@@ -178,7 +184,8 @@ def run_gsm8k_eval(task, tokenizer, engine,
             num_samples=num_samples,
             max_tokens=max_completion_tokens,
             temperature=temperature,
-            top_k=top_k
+            top_k=top_k,
+            top_p=top_p
         )
         # Check each sample for correctness
         outcomes = []
