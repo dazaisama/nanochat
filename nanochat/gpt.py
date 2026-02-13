@@ -11,10 +11,10 @@ Notable features:
 - Group-Query Attention (GQA) support for more efficient inference
 - Flash Attention 3 integration
 """
-
+from typing import Optional
 from functools import partial
 from dataclasses import dataclass
-
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -38,6 +38,9 @@ class GPTConfig:
     # Examples: "L"=all full context, "SL"=alternating, "SSL"=two short then one long
     window_pattern: str = "SSSL"
 
+    #YARN setting!
+    inference_rope_scaling = False
+
 
 def norm(x):
     # Purely functional rmsnorm with no learnable params
@@ -56,7 +59,7 @@ def apply_rotary_emb(x, cos, sin):
     y2 = x1 * (-sin) + x2 * cos
     return torch.cat([y1, y2], 3)
 
-class CausalSelfAttention(nn.Module):
+class GatedAttention(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
         self.layer_idx = layer_idx
@@ -72,8 +75,13 @@ class CausalSelfAttention(nn.Module):
         self.c_proj = nn.Linear(self.n_embd, self.n_embd, bias=False)
         self.ve_gate_channels = 32
         self.ve_gate = nn.Linear(self.ve_gate_channels, self.n_kv_head, bias=False) if has_ve(layer_idx, config.n_layer) else None
+        
+        #New
+        self.output_gate = nn.Linear(self.n_embd, self.n_embd, bias=False)
+
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
+        #batch, seqlen, n_embd
         B, T, C = x.size()
 
         # Project the input to get queries, keys, and values
@@ -81,6 +89,9 @@ class CausalSelfAttention(nn.Module):
         q = self.c_q(x).view(B, T, self.n_head, self.head_dim)
         k = self.c_k(x).view(B, T, self.n_kv_head, self.head_dim)
         v = self.c_v(x).view(B, T, self.n_kv_head, self.head_dim)
+
+        #New
+        gating_score = torch.sigmoid(self.output_gate(x))
 
         # Value residual (ResFormer): mix in value embedding with input-dependent gate per head
         if ve is not None:
@@ -114,6 +125,10 @@ class CausalSelfAttention(nn.Module):
 
         # Re-assemble the heads and project back to residual stream
         y = y.contiguous().view(B, T, -1)
+
+        # Use Hadamard product to achieve QWEN-Output-Gate
+        y = y * gating_score
+
         y = self.c_proj(y)
         return y
 
@@ -134,7 +149,7 @@ class MLP(nn.Module):
 class Block(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
-        self.attn = CausalSelfAttention(config, layer_idx)
+        self.attn = GatedAttention(config, layer_idx)
         self.mlp = MLP(config)
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
@@ -179,9 +194,21 @@ class GPT(nn.Module):
         # As for rotary_seq_len, these rotary embeddings are pretty small/cheap in memory,
         # so let's just over-compute them by 10X, but assert fail if we ever reach that amount.
         # In the future we can dynamically grow the cache, for now it's fine.
-        self.rotary_seq_len = config.sequence_len * 10 # 10X over-compute should be enough, TODO make nicer?
+        self.rotary_seq_len = config.sequence_len * 16 # 16X over-compute should be enough, TODO make nicer?
         head_dim = config.n_embd // config.n_head
-        cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
+
+        #YARN setting
+        self.inference_rope_scaling = config.inference_rope_scaling
+        self.rope_scaling = {
+            "beta_fast": 32,
+            "beta_slow": 1,
+            "factor": 16,
+            "original_max_position_embeddings": 2048,
+            "attention_factor": 1.0,
+            "type": "yarn"
+        } if self.inference_rope_scaling else None
+
+        cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim, 10000, self.rope_scaling)
         self.register_buffer("cos", cos, persistent=False) # persistent=False means it's not saved to the checkpoint
         self.register_buffer("sin", sin, persistent=False)
 
@@ -240,22 +267,38 @@ class GPT(nn.Module):
             for ve in self.value_embeds.values():
                 ve.to(dtype=torch.bfloat16)
 
-    def _precompute_rotary_embeddings(self, seq_len, head_dim, base=10000, device=None):
-        # TODO: bump base theta more? e.g. 100K is more common more recently
-        # autodetect the device from model embeddings
+
+
+    # Update ROPE to YARN！！
+    def _precompute_rotary_embeddings(self, seq_len, head_dim, base=10000, rope_scaling: Optional[dict] = None, device=None):
         if device is None:
             device = self.transformer.wte.weight.device
-        # stride the channels
+
         channel_range = torch.arange(0, head_dim, 2, dtype=torch.float32, device=device)
-        inv_freq = 1.0 / (base ** (channel_range / head_dim))
-        # stride the time steps
+        freqs = 1.0 / (base ** (channel_range / head_dim))
+        attn_factor = 1.0
+
+        if rope_scaling is not None:
+            orig_max, factor, beta_fast, beta_slow, attn_factor = (
+                rope_scaling.get("original_max_position_embeddings", 2048), rope_scaling.get("factor", 16),
+                rope_scaling.get("beta_fast", 32.0), rope_scaling.get("beta_slow", 1.0), rope_scaling.get("attention_factor", 1.0)
+            )
+            if seq_len / orig_max > 1.0:
+                # YaRN: f'(i) = f(i)((1-γ) + γ/s), where γ∈[0,1] is linear ramp
+                inv_dim = lambda b: (head_dim * math.log(orig_max / (b * 2 * math.pi))) / (2 * math.log(base))
+                low, high = max(math.floor(inv_dim(beta_fast)), 0), min(math.ceil(inv_dim(beta_slow)), head_dim // 2 - 1)
+                ramp = torch.clamp((torch.arange(head_dim // 2, device=freqs.device).float() - low) / max(high - low, 0.001), 0, 1)
+                freqs = freqs * (1 - ramp + ramp / factor)
+
+
         t = torch.arange(seq_len, dtype=torch.float32, device=device)
-        # calculate the rotation frequencies at each (time, channel) pair
-        freqs = torch.outer(t, inv_freq)
-        cos, sin = freqs.cos(), freqs.sin()
-        cos, sin = cos.bfloat16(), sin.bfloat16() # keep them in bfloat16
+        freqs = torch.outer(t, freqs)
+        cos, sin = freqs.cos()* attn_factor, freqs.sin()* attn_factor
+        cos, sin = cos.bfloat16(), sin.bfloat16() 
         cos, sin = cos[None, :, None, :], sin[None, :, None, :] # add batch and head dims for later broadcasting
         return cos, sin
+
+
 
     def _compute_window_sizes(self, config):
         """
@@ -404,6 +447,11 @@ class GPT(nn.Module):
             x = self.resid_lambdas[i] * x + self.x0_lambdas[i] * x0
             ve = self.value_embeds[str(i)](idx) if str(i) in self.value_embeds else None
             x = block(x, ve, cos_sin, self.window_sizes[i], kv_cache)
+
+            #check output-gating-score, which should be sparse
+            print(i,"layer gating score:")
+            print(block.attn.output_gate)
+
         x = norm(x)
 
         # Forward the lm_head (compute logits)
@@ -422,6 +470,9 @@ class GPT(nn.Module):
             # inference: just return the logits directly
             return logits
 
+
+
+    #only for test
     @torch.inference_mode()
     def generate(self, tokens, max_tokens, temperature=1.0, top_k=None, seed=42):
         """
