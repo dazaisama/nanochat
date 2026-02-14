@@ -37,14 +37,15 @@ for i, block in enumerate(model.transformer.h):
         gatescore_list = np.concatenate([gatescore_list, weight_vals])
 
 plt.figure(figsize=(10, 6))
-# 直接传入NumPy数组绘图，效率最高
+
 plt.hist(gatescore_list, bins=50, edgecolor='black', alpha=0.7, color='#1f77b4')
 plt.title("Gate score distribution", fontsize=12)
-plt.xlabel("gate score", fontsize=10)
-plt.ylabel("times", fontsize=10)
+plt.xlabel("Gate score", fontsize=10)
+plt.ylabel("Frequency", fontsize=10)
 plt.grid(axis='y', alpha=0.3)
-# 可选：添加统计信息（均值、标准差）
+
 plt.axvline(gatescore_list.mean(), color='red', linestyle='--', label=f'Mean: {gatescore_list.mean():.4f}')
 plt.axvline(gatescore_list.var(), color='green', linestyle='--', label=f'Variance: {gatescore_list.var():.4f}' )
 plt.legend()
+
 plt.show()
