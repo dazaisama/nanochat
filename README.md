@@ -37,6 +37,11 @@
 部分的gating score值：       
 ![gatingscore](dev/gate_score.png)             
 
+训练1000steps的模型各层gating score分布图：      
+![gatingscoredis](dev/gate_score_distribution.png)      
+
+上图可通过运行(scripts.val_gate_score.py)得到
+
 预期效果：        
 1 训练充分之后，gating score矩阵应该是非常稀疏的，数值聚集在0附近           
 2 显著缓解attention sinks现象。即将序列最后一个token推理中的各层attention maps绘制出热力图，高分数应该聚集在对角线，而不是首个Token。从而让sliding window更加有效捕捉最近的语义信息，不用再考虑最初几个token的信息，减轻KV cache压力。           
