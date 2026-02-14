@@ -450,10 +450,6 @@ class GPT(nn.Module):
             ve = self.value_embeds[str(i)](idx) if str(i) in self.value_embeds else None
             x = block(x, ve, cos_sin, self.window_sizes[i], kv_cache)
 
-            #check output-gating-score, which should be sparse
-            print(i,"layer gating score:")
-            print(block.attn.output_gate.weight.data)
-
         x = norm(x)
 
         # Forward the lm_head (compute logits)
