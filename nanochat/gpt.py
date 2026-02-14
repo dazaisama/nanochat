@@ -452,7 +452,7 @@ class GPT(nn.Module):
 
             #check output-gating-score, which should be sparse
             print(i,"layer gating score:")
-            print(block.attn.output_gate)
+            print(block.attn.output_gate.weight.data)
 
         x = norm(x)
 
