@@ -32,7 +32,7 @@
 3 loss曲线      
 
 训练1000 steps的截图：   
-![loss](dev/loss.png)     
+![loss1000](dev/loss.png)     
 
 预期效果：        
 1 训练充分之后，gating score矩阵应该是非常稀疏的，数值聚集在0附近           
