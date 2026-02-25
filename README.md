@@ -1,4 +1,4 @@
-# 实现了任务3架构变体 和 6工程实现
+# 架构变体 和 工程实现
 
 <!-- ![nanochat logo](dev/nanochat.png)
 ![scaling laws](dev/scaling_laws_jan26.png) -->
